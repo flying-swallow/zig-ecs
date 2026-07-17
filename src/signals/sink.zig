@@ -16,20 +16,18 @@ pub fn SinkFromTuple(comptime Params: type) type {
     return struct {
         const Self = @This();
 
+        /// the Signal this Sink operates on
+        signal: *SignalFromTuple(Params),
         insert_index: usize,
 
-        /// the Signal this Sink is temporarily wrapping
-        var owning_signal: *SignalFromTuple(Params) = undefined;
-
         pub fn init(signal: *SignalFromTuple(Params)) Self {
-            owning_signal = signal;
-            return Self{ .insert_index = owning_signal.calls.items.len };
+            return .{ .signal = signal, .insert_index = signal.calls.items.len };
         }
 
         pub fn before(self: Self, free_fn: ?Delegate(Params).FreeFn) Self {
             if (free_fn) |cb| {
                 if (self.indexOf(cb)) |index| {
-                    return Self{ .insert_index = index };
+                    return .{ .signal = self.signal, .insert_index = index };
                 }
             }
             return self;
@@ -38,7 +36,7 @@ pub fn SinkFromTuple(comptime Params: type) type {
         pub fn beforeBound(self: Self, ctx_ptr: anytype) Self {
             if (@typeInfo(@TypeOf(ctx_ptr)) == .pointer) {
                 if (self.indexOfBound(ctx_ptr)) |index| {
-                    return Self{ .insert_index = index };
+                    return .{ .signal = self.signal, .insert_index = index };
                 }
             }
             return self;
@@ -48,30 +46,30 @@ pub fn SinkFromTuple(comptime Params: type) type {
         /// NOTE: each free_fn can only be connected ONCE to the same sink
         pub fn connect(self: Self, free_fn: Delegate(Params).FreeFn) void {
             std.debug.assert(self.indexOf(free_fn) == null);
-            _ = owning_signal.calls.insert(owning_signal.allocator, self.insert_index, Delegate(Params).initFree(free_fn)) catch unreachable;
+            _ = self.signal.calls.insert(self.signal.allocator, self.insert_index, Delegate(Params).initFree(free_fn)) catch unreachable;
         }
 
         /// connects a context `Delegate(Params).BindFn(@TypeOf(ctx_ptr))` to this sink
         /// NOTE: each ctx_ptr can only be connected ONCE to the same sink
         pub fn connectBound(self: Self, ctx_ptr: anytype, bind_fn: Delegate(Params).BindFn(@TypeOf(ctx_ptr))) void {
             std.debug.assert(self.indexOfBound(ctx_ptr) == null);
-            _ = owning_signal.calls.insert(owning_signal.allocator, self.insert_index, Delegate(Params).initBind(ctx_ptr, bind_fn)) catch unreachable;
+            _ = self.signal.calls.insert(self.signal.allocator, self.insert_index, Delegate(Params).initBind(ctx_ptr, bind_fn)) catch unreachable;
         }
 
         pub fn disconnect(self: Self, free_fn: Delegate(Params).FreeFn) void {
             if (self.indexOf(free_fn)) |index| {
-                _ = owning_signal.calls.swapRemove(index);
+                _ = self.signal.calls.swapRemove(index);
             }
         }
 
         pub fn disconnectBound(self: Self, ctx_ptr: anytype) void {
             if (self.indexOfBound(ctx_ptr)) |index| {
-                _ = owning_signal.calls.swapRemove(index);
+                _ = self.signal.calls.swapRemove(index);
             }
         }
 
-        fn indexOf(_: Self, free_fn: Delegate(Params).FreeFn) ?usize {
-            for (owning_signal.calls.items, 0..) |call, i| {
+        fn indexOf(self: Self, free_fn: Delegate(Params).FreeFn) ?usize {
+            for (self.signal.calls.items, 0..) |call, i| {
                 if (call.containsFree(free_fn)) {
                     return i;
                 }
@@ -79,8 +77,8 @@ pub fn SinkFromTuple(comptime Params: type) type {
             return null;
         }
 
-        fn indexOfBound(_: Self, ctx_ptr: anytype) ?usize {
-            for (owning_signal.calls.items, 0..) |call, i| {
+        fn indexOfBound(self: Self, ctx_ptr: anytype) ?usize {
+            for (self.signal.calls.items, 0..) |call, i| {
                 if (call.containsBound(ctx_ptr)) {
                     return i;
                 }
@@ -124,4 +122,49 @@ test "Sink Before bound" {
 
     signal.sink().beforeBound(&thing).connect(tester);
     try std.testing.expectEqual(signal.sink().indexOf(tester).?, 0);
+}
+
+test "two sinks of the same Params do not alias" {
+    var s1 = Signal(.{u32}).init(std.testing.allocator);
+    defer s1.deinit();
+    var s2 = Signal(.{u32}).init(std.testing.allocator);
+    defer s2.deinit();
+
+    // obtain both sinks BEFORE connecting through either; with the old
+    // container-scope `var owning_signal`, taking s2's sink retargeted s1's
+    const sink1 = s1.sink();
+    const sink2 = s2.sink();
+
+    sink1.connect(tester);
+    try std.testing.expectEqual(@as(usize, 1), s1.size());
+    try std.testing.expectEqual(@as(usize, 0), s2.size());
+
+    sink2.connect(tester);
+    try std.testing.expectEqual(@as(usize, 1), s1.size());
+    try std.testing.expectEqual(@as(usize, 1), s2.size());
+
+    sink1.disconnect(tester);
+    try std.testing.expectEqual(@as(usize, 0), s1.size());
+    try std.testing.expectEqual(@as(usize, 1), s2.size());
+}
+
+test "stored sink stays bound to its signal" {
+    var s1 = Signal(.{u32}).init(std.testing.allocator);
+    defer s1.deinit();
+    var s2 = Signal(.{u32}).init(std.testing.allocator);
+    defer s2.deinit();
+
+    var stored = s1.sink();
+    var thing = Thing{};
+
+    // creating and using another same-Params sink must not retarget `stored`
+    s2.sink().connectBound(&thing, &Thing.tester);
+
+    stored.connect(tester);
+    try std.testing.expectEqual(@as(usize, 1), s1.size());
+    try std.testing.expectEqual(@as(usize, 1), s2.size());
+
+    stored.disconnect(tester);
+    try std.testing.expectEqual(@as(usize, 0), s1.size());
+    try std.testing.expectEqual(@as(usize, 1), s2.size());
 }

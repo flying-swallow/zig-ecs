@@ -44,7 +44,7 @@ pub fn SignalFromTuple(comptime Params: type) type {
         }
 
         pub fn empty(self: Self) bool {
-            return self.size == 0;
+            return self.calls.items.len == 0;
         }
 
         /// Disconnects all the listeners from a signal
@@ -97,6 +97,7 @@ test "Signal/Sink" {
 
     sink.disconnectBound(&thing);
     try std.testing.expectEqual(@as(usize, 0), signal.size());
+    try std.testing.expect(signal.empty());
 }
 
 test "Sink Before null" {

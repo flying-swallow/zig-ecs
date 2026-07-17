@@ -23,7 +23,7 @@ test "handles stress test" {
 
     var xoro: std.Random.Xoshiro256 = .init(78425829754);
     const rand = xoro.random();
-    var tested_scenarios: [4]bool = @splat(false);
+    var tested_scenarios: [6]bool = @splat(false);
     const iters = 10_000;
     for (0..iters) |i| {
         // vary this to cover all cases
@@ -31,6 +31,22 @@ test "handles stress test" {
             2 * @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(iters))
         else
             -2 * @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(iters)) + 2;
+
+        // occasionally force a chosen handle alive
+        if (rand.float(f32) < 0.05) {
+            const forced: Entity = .{ .index = rand.uintLessThan(u8, Handles.max_active_entities), .version = rand.int(u4) };
+            if (handles.generate(forced)) {
+                try std.testing.expect(handles.alive(forced));
+                // no other live entity may share this index
+                for (entities.items) |e| try std.testing.expect(e.index != forced.index);
+                entities.appendAssumeCapacity(forced);
+                tested_scenarios[4] = true;
+            } else |err| {
+                try std.testing.expectEqual(error.AlreadyExists, err);
+                tested_scenarios[5] = true;
+            }
+            continue;
+        }
 
         // remove entity from list
         if (rand.float(f32) < remove_probability) {
@@ -60,7 +76,7 @@ test "handles stress test" {
     }
     try std.testing.expectEqualSlices(
         bool,
-        &@as([4]bool, @splat(true)),
+        &@as([6]bool, @splat(true)),
         &tested_scenarios,
     );
 }

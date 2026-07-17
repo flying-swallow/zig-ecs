@@ -109,6 +109,28 @@ pub fn typeId(comptime T: type) u32 {
     return hashStringFnv(u32, @typeName(T));
 }
 
+/// returns the indices of the first pair of duplicate ids, or null
+pub fn firstDuplicate(ids: []const u32) ?[2]usize {
+    for (ids, 0..) |id, i| {
+        for (ids[i + 1 ..], i + 1..) |other, j| {
+            if (id == other) return .{ i, j };
+        }
+    }
+    return null;
+}
+
+/// comptime-asserts that no two types in the tuple share a typeId, closing the
+/// (unlikely but catastrophic) name-hash collision case for the set in use
+pub fn assertNoTypeIdCollisions(comptime types: anytype) void {
+    comptime {
+        var ids: [types.len]u32 = undefined;
+        for (types, 0..) |T, i| ids[i] = typeId(T);
+        if (firstDuplicate(&ids)) |pair| {
+            @compileError("typeId collision between " ++ @typeName(types[pair[0]]) ++ " and " ++ @typeName(types[pair[1]]));
+        }
+    }
+}
+
 /// comptime string hashing for the type names
 pub fn typeId64(comptime T: type) u64 {
     return hashStringFnv(u64, @typeName(T));
@@ -161,4 +183,13 @@ test "ReverseSliceIterator" {
         try std.testing.expectEqual(i, val);
         if (i > 0) i -= 1;
     }
+}
+
+test "firstDuplicate" {
+    try std.testing.expectEqual(null, firstDuplicate(&.{ 1, 2, 3, 4 }));
+    try std.testing.expectEqual([2]usize{ 1, 3 }, firstDuplicate(&.{ 1, 2, 3, 2 }).?);
+    try std.testing.expectEqual(null, firstDuplicate(&.{}));
+
+    // comptime smoke test: distinct types never collide in practice
+    comptime assertNoTypeIdCollisions(.{ u8, u16, struct { x: f32 }, struct {} });
 }

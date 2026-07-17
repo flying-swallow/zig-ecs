@@ -79,14 +79,14 @@ pub const OwningGroup = struct {
             group: OwningGroup,
             index: usize,
             storage: *Storage(u1),
-            component_ptrs: [@typeInfo(Components).@"struct".fields.len][*]u8,
+            component_ptrs: [@typeInfo(Components).@"struct".field_types.len][*]u8,
 
             pub fn init(group: OwningGroup) @This() {
                 const component_info = @typeInfo(Components).@"struct";
 
-                var component_ptrs: [component_info.fields.len][*]u8 = undefined;
-                inline for (component_info.fields, 0..) |field, i| {
-                    const storage = group.registry.assure(@typeInfo(field.type).pointer.child);
+                var component_ptrs: [component_info.field_types.len][*]u8 = undefined;
+                inline for (component_info.field_types, 0..) |FieldType, i| {
+                    const storage = group.registry.assure(@typeInfo(FieldType).pointer.child);
                     component_ptrs[i] = @ptrCast(storage.instances.items.ptr);
                 }
 
@@ -104,9 +104,10 @@ pub const OwningGroup = struct {
 
                 // fill and return the struct
                 var comps: Components = undefined;
-                inline for (@typeInfo(Components).@"struct".fields, 0..) |field, i| {
-                    const typed_ptr: [*]@typeInfo(field.type).pointer.child = @ptrCast(@alignCast(it.component_ptrs[i]));
-                    @field(comps, field.name) = &typed_ptr[it.index];
+                const component_info = @typeInfo(Components).@"struct";
+                inline for (component_info.field_types, 0..) |FieldType, i| {
+                    const typed_ptr: [*]@typeInfo(FieldType).pointer.child = @ptrCast(@alignCast(it.component_ptrs[i]));
+                    @field(comps, component_info.field_names[i]) = &typed_ptr[it.index];
                 }
                 return comps;
             }
@@ -160,9 +161,9 @@ pub const OwningGroup = struct {
         if (builtin.mode == .Debug and self.group_data.owned.len > 0) {
             std.debug.assert(@typeInfo(Components) == .@"struct");
 
-            inline for (@typeInfo(Components).@"struct".fields) |field| {
-                std.debug.assert(@typeInfo(field.type) == .pointer);
-                const found = std.mem.indexOfScalar(u32, self.group_data.owned, utils.typeId(std.meta.Child(field.type)));
+            inline for (@typeInfo(Components).@"struct".field_types) |FieldType| {
+                std.debug.assert(@typeInfo(FieldType) == .pointer);
+                const found = std.mem.indexOfScalar(u32, self.group_data.owned, utils.typeId(std.meta.Child(FieldType)));
                 std.debug.assert(found != null);
             }
         }
@@ -172,18 +173,18 @@ pub const OwningGroup = struct {
         self.validate(Components);
         const component_info = @typeInfo(Components).@"struct";
 
-        var component_ptrs: [component_info.fields.len][*]u8 = undefined;
-        inline for (component_info.fields, 0..) |field, i| {
-            const storage = self.registry.assure(std.meta.Child(field.type));
+        var component_ptrs: [component_info.field_types.len][*]u8 = undefined;
+        inline for (component_info.field_types, 0..) |FieldType, i| {
+            const storage = self.registry.assure(std.meta.Child(FieldType));
             component_ptrs[i] = @ptrCast(storage.instances.items.ptr);
         }
 
         // fill the struct
         const index = self.firstOwnedStorage().set.index(entity);
         var comps: Components = undefined;
-        inline for (component_info.fields, 0..) |field, i| {
-            const typed_ptr: [*]std.meta.Child(field.type) = @ptrCast(@alignCast(component_ptrs[i]));
-            @field(comps, field.name) = &typed_ptr[index];
+        inline for (component_info.field_types, 0..) |FieldType, i| {
+            const typed_ptr: [*]std.meta.Child(FieldType) = @ptrCast(@alignCast(component_ptrs[i]));
+            @field(comps, component_info.field_names[i]) = &typed_ptr[index];
         }
 
         return comps;
@@ -191,7 +192,7 @@ pub const OwningGroup = struct {
 
     pub fn each(self: OwningGroup, comptime func: anytype) void {
         const Components = switch (@typeInfo(@TypeOf(func))) {
-            .@"fn" => |func_info| func_info.params[0].type.?,
+            .@"fn" => |func_info| func_info.param_types[0].?,
             else => std.debug.assert("invalid func"),
         };
         self.validate(Components);

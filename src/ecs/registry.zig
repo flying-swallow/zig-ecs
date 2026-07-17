@@ -271,8 +271,8 @@ pub const Registry = struct {
     /// reentrant crashes when a handler calls `destroy` on the same entity.
     pub fn destroy(self: *Registry, entity: Entity) void {
         assert(self.valid(entity));
-        self.removeAll(entity);
         self.handles.remove(entity) catch unreachable;
+        self.removeAllComponents(entity);
     }
 
     /// returns an interator that iterates all live entities
@@ -420,7 +420,14 @@ pub const Registry = struct {
     /// Removes all the components from an entity and makes it orphaned
     pub fn removeAll(self: *Registry, entity: Entity) void {
         assert(self.valid(entity));
+        self.removeAllComponents(entity);
+    }
 
+    /// Removes every component from an entity without asserting the handle is
+    /// still alive. `destroy` invalidates the handle first (so reentrant
+    /// destruction-signal handlers bail out), so it cannot go through the
+    /// validity-asserting `removeAll`.
+    fn removeAllComponents(self: *Registry, entity: Entity) void {
         var iter = self.components.valueIterator();
         while (iter.next()) |value| {
             // HACK: we dont know the Type here but we need to be able to call methods on the Storage(T)

@@ -6,6 +6,12 @@ const Storage = @import("registry.zig").Storage;
 const Entity = @import("registry.zig").Entity;
 const ReverseSliceIterator = @import("utils.zig").ReverseSliceIterator;
 
+/// returns the compile-time default value of a struct field
+fn fieldDefaultValue(comptime T: type, comptime field: std.meta.FieldEnum(T)) std.meta.fieldInfo(T, field).type {
+    const info = std.meta.fieldInfo(T, field);
+    return info.attrs.defaultValue(info.type).?;
+}
+
 /// single item view. Iterating raw() directly is the fastest way to get at the data. An iterator is also available to iterate
 /// either the Entities or the Components. If T is sorted note that raw() will be in the reverse order so it should be looped
 /// backwards. The iterators will return data in the sorted order though.
@@ -224,14 +230,14 @@ pub fn MultiView(comptime _includes: anytype, comptime _excludes: anytype) type 
 
         //// merge multiviews types, returning a new multiview type.
         pub fn extendType(comptime Diff: type) type {
-            const diff_n_includes = std.meta.fieldInfo(Diff, .n_includes).defaultValue().?;
-            const diff_n_excludes = std.meta.fieldInfo(Diff, .n_excludes).defaultValue().?;
+            const diff_n_includes = fieldDefaultValue(Diff, .n_includes);
+            const diff_n_excludes = fieldDefaultValue(Diff, .n_excludes);
 
-            const diff_includes: [diff_n_includes]type = std.meta.fieldInfo(Diff, .includes).defaultValue().?;
-            const diff_excludes: [diff_n_excludes]type = std.meta.fieldInfo(Diff, .excludes).defaultValue().?;
+            const diff_includes: [diff_n_includes]type = fieldDefaultValue(Diff, .includes);
+            const diff_excludes: [diff_n_excludes]type = fieldDefaultValue(Diff, .excludes);
 
-            const self_includes: [_includes.len]type = std.meta.fieldInfo(Self, .includes).defaultValue().?;
-            const self_excludes: [_excludes.len]type = std.meta.fieldInfo(Self, .excludes).defaultValue().?;
+            const self_includes: [_includes.len]type = fieldDefaultValue(Self, .includes);
+            const self_excludes: [_excludes.len]type = fieldDefaultValue(Self, .excludes);
 
             if (std.mem.indexOfAny(type, &self_includes, &diff_includes) != null) {
                 @compileError(std.fmt.comptimePrint("Overlap between current include types {any} and new include types {any} detected!", .{ self_includes, diff_includes }));

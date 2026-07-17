@@ -67,17 +67,17 @@ pub fn DelegateFromTuple(comptime Params: type) type {
 /// Generate a free function pointer type from a tuple type, without @Type.
 /// Supports up to 8 parameters.
 fn FreeFnType(comptime Params: type) type {
-    const fields = std.meta.fields(Params);
+    const fields = std.meta.fieldTypes(Params);
     return switch (fields.len) {
         0 => *const fn () void,
-        1 => *const fn (fields[0].type) void,
-        2 => *const fn (fields[0].type, fields[1].type) void,
-        3 => *const fn (fields[0].type, fields[1].type, fields[2].type) void,
-        4 => *const fn (fields[0].type, fields[1].type, fields[2].type, fields[3].type) void,
-        5 => *const fn (fields[0].type, fields[1].type, fields[2].type, fields[3].type, fields[4].type) void,
-        6 => *const fn (fields[0].type, fields[1].type, fields[2].type, fields[3].type, fields[4].type, fields[5].type) void,
-        7 => *const fn (fields[0].type, fields[1].type, fields[2].type, fields[3].type, fields[4].type, fields[5].type, fields[6].type) void,
-        8 => *const fn (fields[0].type, fields[1].type, fields[2].type, fields[3].type, fields[4].type, fields[5].type, fields[6].type, fields[7].type) void,
+        1 => *const fn (fields[0]) void,
+        2 => *const fn (fields[0], fields[1]) void,
+        3 => *const fn (fields[0], fields[1], fields[2]) void,
+        4 => *const fn (fields[0], fields[1], fields[2], fields[3]) void,
+        5 => *const fn (fields[0], fields[1], fields[2], fields[3], fields[4]) void,
+        6 => *const fn (fields[0], fields[1], fields[2], fields[3], fields[4], fields[5]) void,
+        7 => *const fn (fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], fields[6]) void,
+        8 => *const fn (fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], fields[6], fields[7]) void,
         else => @compileError("Delegate: too many parameters (max 8)"),
     };
 }
@@ -85,17 +85,17 @@ fn FreeFnType(comptime Params: type) type {
 /// Generate a bound function pointer type (with context as first param) from a tuple type.
 /// Supports up to 8 additional parameters.
 fn BindFnType(comptime T: type, comptime Params: type) type {
-    const fields = std.meta.fields(Params);
+    const fields = std.meta.fieldTypes(Params);
     return switch (fields.len) {
         0 => *const fn (T) void,
-        1 => *const fn (T, fields[0].type) void,
-        2 => *const fn (T, fields[0].type, fields[1].type) void,
-        3 => *const fn (T, fields[0].type, fields[1].type, fields[2].type) void,
-        4 => *const fn (T, fields[0].type, fields[1].type, fields[2].type, fields[3].type) void,
-        5 => *const fn (T, fields[0].type, fields[1].type, fields[2].type, fields[3].type, fields[4].type) void,
-        6 => *const fn (T, fields[0].type, fields[1].type, fields[2].type, fields[3].type, fields[4].type, fields[5].type) void,
-        7 => *const fn (T, fields[0].type, fields[1].type, fields[2].type, fields[3].type, fields[4].type, fields[5].type, fields[6].type) void,
-        8 => *const fn (T, fields[0].type, fields[1].type, fields[2].type, fields[3].type, fields[4].type, fields[5].type, fields[6].type, fields[7].type) void,
+        1 => *const fn (T, fields[0]) void,
+        2 => *const fn (T, fields[0], fields[1]) void,
+        3 => *const fn (T, fields[0], fields[1], fields[2]) void,
+        4 => *const fn (T, fields[0], fields[1], fields[2], fields[3]) void,
+        5 => *const fn (T, fields[0], fields[1], fields[2], fields[3], fields[4]) void,
+        6 => *const fn (T, fields[0], fields[1], fields[2], fields[3], fields[4], fields[5]) void,
+        7 => *const fn (T, fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], fields[6]) void,
+        8 => *const fn (T, fields[0], fields[1], fields[2], fields[3], fields[4], fields[5], fields[6], fields[7]) void,
         else => @compileError("Delegate: too many parameters (max 8)"),
     };
 }
@@ -105,7 +105,7 @@ pub fn Tuple(comptime Params: anytype) type {
     for (Params, 0..) |Param, i| {
         params[i] = Param;
     }
-    return std.meta.Tuple(&params);
+    return @Tuple(&params);
 }
 
 fn tester(param: u32) void {

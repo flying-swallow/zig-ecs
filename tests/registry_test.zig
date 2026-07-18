@@ -218,3 +218,41 @@ test "destroy: component data is still readable in onDestruct signal" {
     try std.testing.expect(signal_saw_position);
     try std.testing.expect(!reg.valid(entity));
 }
+
+test "sinks: two component sinks held simultaneously stay independent" {
+    // Both onConstruct sinks share the same Params tuple (.{ *Registry, Entity }),
+    // so with the old container-scope `var owning_signal` in Sink the second
+    // sink retargeted the first one's signal.
+    var reg = Registry.init(std.testing.allocator);
+    defer reg.deinit();
+
+    var pos_count: u32 = 0;
+    var vel_count: u32 = 0;
+
+    const pos_sink = reg.onConstruct(Position);
+    const vel_sink = reg.onConstruct(Velocity);
+
+    const handler = struct {
+        fn handler(count: *u32, _: *Registry, _: ecs.Entity) void {
+            count.* += 1;
+        }
+    }.handler;
+
+    pos_sink.connectBound(&pos_count, handler);
+    vel_sink.connectBound(&vel_count, handler);
+
+    const e1 = reg.create();
+    reg.add(e1, Position{ .x = 1, .y = 1 });
+    const e2 = reg.create();
+    reg.add(e2, Velocity{ .x = 2, .y = 2 });
+    reg.add(e2, Position{ .x = 3, .y = 3 });
+
+    try std.testing.expectEqual(@as(u32, 2), pos_count);
+    try std.testing.expectEqual(@as(u32, 1), vel_count);
+
+    pos_sink.disconnectBound(&pos_count);
+    reg.add(reg.create(), Position{});
+    try std.testing.expectEqual(@as(u32, 2), pos_count);
+
+    vel_sink.disconnectBound(&vel_count);
+}
